@@ -1,0 +1,98 @@
+#!/usr/bin/perl
+
+# Run a child process for fraction of the time: kind of resource throttling.
+
+use strict;
+use warnings;
+
+use feature qw(say);
+
+use Carp;
+use English qw(-no_match_vars);
+use Getopt::Long;
+use POSIX ":sys_wait_h";
+
+use Data::Dumper;
+
+
+sub usage() {
+	print "Usage: $0 [-p pct] -- <executable>\n";
+
+	exit(1);
+}
+
+
+sub process_args {
+	my $pct;
+	my @exe;
+
+	GetOptions(
+		'pct|p=s' => \$pct
+	) or usage();
+
+	@exe = @ARGV;
+
+	if (!@exe) {
+		usage();
+	}
+
+	return (\@exe, $pct);
+}
+
+
+sub fork_and_throttle {
+	my $exe = shift || croak('$exe is required');
+	my $pct = shift || croak('$pct is required');
+
+	my $cpid;
+	my $wpret;
+	my $stop_time;
+
+	# We don't want to send signals too often. Once per second sounds about
+	# right.
+	#
+	# So, let the $exe run for 1 second in each itteration, and ensure % time
+	# compliance by controlling the STOP time.
+	#
+	# E.g. 25% = Run 1 sec, Stop 3 sec.
+	$stop_time = 1 / ($pct/100) - 1;
+	say "D: $stop_time";
+
+	$cpid = fork();
+
+	if (!defined($cpid)) {
+		croak("fork() failed: $OS_ERROR");
+	}
+
+	if ($cpid == 0) {
+		exec(@{$exe}) or croak("$OS_ERROR");
+	} else {
+		while() {
+			$wpret = waitpid($cpid, WNOHANG);
+
+			last if ($wpret != 0);
+
+			kill('STOP', $cpid);
+			sleep($stop_time);
+			kill('CONT', $cpid);
+
+			sleep(1);
+		}
+	}
+
+	return;
+}
+
+sub main {
+	my $exe = [];
+	my $pct = 50;
+
+	local $ENV{'PATH'} = '';
+
+	($exe, $pct) = process_args();
+	fork_and_throttle($exe, $pct);
+
+	return;
+}
+
+main();
