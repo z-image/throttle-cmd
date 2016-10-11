@@ -12,8 +12,6 @@ use English qw(-no_match_vars);
 use Getopt::Long;
 use POSIX ":sys_wait_h";
 
-use Data::Dumper;
-
 
 sub usage() {
 	print "Usage: $0 [-p pct] -- <executable>\n";
@@ -56,7 +54,6 @@ sub fork_and_throttle {
 	#
 	# E.g. 25% = Run 1 sec, Stop 3 sec.
 	$stop_time = 1 / ($pct/100) - 1;
-	say "D: $stop_time";
 
 	$cpid = fork();
 
@@ -86,8 +83,6 @@ sub fork_and_throttle {
 sub main {
 	my $exe = [];
 	my $pct = 50;
-
-	local $ENV{'PATH'} = '';
 
 	($exe, $pct) = process_args();
 	fork_and_throttle($exe, $pct);
